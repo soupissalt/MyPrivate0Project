@@ -60,7 +60,7 @@ public class RefreshToken {
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;
 
-    @Column(nullable = false)
+    @Column(name = "revoked", columnDefinition = "TINYINT(1)", nullable = false)
     private boolean revoked;
 
     protected RefreshToken() {}

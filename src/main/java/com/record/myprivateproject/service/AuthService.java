@@ -4,6 +4,7 @@ import com.record.myprivateproject.domain.RefreshToken;
 import com.record.myprivateproject.domain.Role;
 import com.record.myprivateproject.domain.User;
 import com.record.myprivateproject.dto.AuthDtos.*;
+import com.record.myprivateproject.dto.RegisterRequest;
 import com.record.myprivateproject.repository.RefreshTokenRepository;
 import com.record.myprivateproject.repository.UserRepository;
 import com.record.myprivateproject.security.JwtTokenProvider;
@@ -25,6 +26,7 @@ public class AuthService {
     private final AuthenticationManager authManager;
     private final JwtTokenProvider jwt;
     private final long refreshTtlSeconds;
+    private final PasswordEncoder passwordEncoder;
 
     public AuthService(
             UserRepository userRepo,
@@ -32,13 +34,14 @@ public class AuthService {
             PasswordEncoder encoder,
             AuthenticationManager authManager,
             JwtTokenProvider jwt,
-            @Value("${app.jwt.refresh-ttl-seconds}")long refreshTtlSeconds){
+            @Value("${app.jwt.refresh-ttl-seconds}")long refreshTtlSeconds, UserRepository userRepository, PasswordEncoder passwordEncoder){
                 this.userRepo = userRepo;
                 this.encoder = encoder;
                 this.rtRepo = rtRepo;
                 this.authManager = authManager;
                 this.jwt = jwt;
                 this.refreshTtlSeconds = refreshTtlSeconds;
+                this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional
@@ -84,5 +87,20 @@ public class AuthService {
             rt.setRevoked(true);
             rtRepo.save(rt);
         });
+    }
+    // import들: UserRepository, PasswordEncoder, User, RegisterRequest, LoginRequest, TokenResponse 등 프로젝트에 맞게
+    @Transactional
+    public TokenResponse register(RegisterRequest req) {
+        if (userRepo.existsByEmail(req.email())) {
+            throw new IllegalArgumentException("이미 가입된 이메일입니다.");
+        }
+
+        // 비밀번호 해시 후 저장
+        String hashed = passwordEncoder.encode(req.password());
+        User user = new User(req.email(), hashed, Role.READER);
+        userRepo.save(user);
+
+        // 가입 직후 로그인과 동일한 토큰 응답을 원하면, 기존 login 로직 재사용
+        return login(new LoginRequest(req.email(), req.password()));
     }
 }

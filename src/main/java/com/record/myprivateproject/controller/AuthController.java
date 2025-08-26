@@ -1,6 +1,7 @@
 package com.record.myprivateproject.controller;
 
 import com.record.myprivateproject.dto.AuthDtos.*;
+import com.record.myprivateproject.dto.RegisterRequest;
 import com.record.myprivateproject.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -37,5 +38,9 @@ public class AuthController {
     public ResponseEntity<?> logout(@Valid @RequestBody RefreshRequest req){
         authService.logout(req.refreshToken());
         return ResponseEntity.ok().build();
+    }
+    @PostMapping("/register")
+    public ResponseEntity<TokenResponse> register(@Valid @RequestBody RegisterRequest req) {
+        return ResponseEntity.ok(authService.register(req));
     }
 }
