@@ -20,8 +20,8 @@ public class FolderController {
     @PostMapping
     public ResponseEntity<FolderResponse> create(@Valid @RequestBody CreateFolderRequest req){
         Folder folder = folderService.createFolder(req.repoId(), req.parentId(), req.name());
-        Long PID = folder.getParent() == null ? null : folder.getParent().getId();
-        return ResponseEntity.ok(new FolderResponse(folder.getId(), folder.getName(), PID));
+        Long pid = (folder.getParent() == null) ? null : folder.getParent().getId();
+        return ResponseEntity.ok(new FolderResponse(folder.getId(), folder.getName(), pid));
     }
 
     @GetMapping("/{folderId}/children")

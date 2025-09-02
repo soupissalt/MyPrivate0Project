@@ -20,7 +20,7 @@ public class RepositoryEntity {
 
     // DB 오타 컬럼명에 매핑
     @Column(name = "visibility", nullable = false, length = 16)
-    private String visibility; //"private", "public"등
+    private String visibility = "private"; //"private", "public"등
 
     @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -31,6 +31,9 @@ public class RepositoryEntity {
         this.owner = owner;
         this.name = name;
         this.visibility = visibility;
+    }
+    public static RepositoryEntity createDefault(User owner, String name) {
+        return new RepositoryEntity(owner, name, "private");
     }
 
     public Long getId() {

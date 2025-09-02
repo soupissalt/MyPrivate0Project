@@ -1,11 +1,11 @@
 package com.record.myprivateproject.service;
 
-import com.record.myprivateproject.domain.RefreshToken;
-import com.record.myprivateproject.domain.Role;
-import com.record.myprivateproject.domain.User;
+import com.record.myprivateproject.domain.*;
 import com.record.myprivateproject.dto.AuthDtos.*;
 import com.record.myprivateproject.dto.RegisterRequest;
+import com.record.myprivateproject.repository.FolderRepository;
 import com.record.myprivateproject.repository.RefreshTokenRepository;
+import com.record.myprivateproject.repository.RepositoryEntityRepository;
 import com.record.myprivateproject.repository.UserRepository;
 import com.record.myprivateproject.security.JwtTokenProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,6 +27,8 @@ public class AuthService {
     private final JwtTokenProvider jwt;
     private final long refreshTtlSeconds;
     private final PasswordEncoder passwordEncoder;
+    private final RepositoryEntityRepository repoRepo;
+    private final FolderRepository folderRepository;
 
     public AuthService(
             UserRepository userRepo,
@@ -34,7 +36,7 @@ public class AuthService {
             PasswordEncoder encoder,
             AuthenticationManager authManager,
             JwtTokenProvider jwt,
-            @Value("${app.jwt.refresh-ttl-seconds}")long refreshTtlSeconds, UserRepository userRepository, PasswordEncoder passwordEncoder){
+            @Value("${app.jwt.refresh-ttl-seconds}")long refreshTtlSeconds, UserRepository userRepository, PasswordEncoder passwordEncoder, RepositoryEntityRepository repoRepo, FolderRepository folderRepository){
                 this.userRepo = userRepo;
                 this.encoder = encoder;
                 this.rtRepo = rtRepo;
@@ -42,6 +44,8 @@ public class AuthService {
                 this.jwt = jwt;
                 this.refreshTtlSeconds = refreshTtlSeconds;
                 this.passwordEncoder = passwordEncoder;
+                this.repoRepo = repoRepo;
+        this.folderRepository = folderRepository;
     }
 
     @Transactional
@@ -91,16 +95,28 @@ public class AuthService {
     // import들: UserRepository, PasswordEncoder, User, RegisterRequest, LoginRequest, TokenResponse 등 프로젝트에 맞게
     @Transactional
     public TokenResponse register(RegisterRequest req) {
+        // 중복 이메일 사전 체크
         if (userRepo.existsByEmail(req.email())) {
             throw new IllegalArgumentException("이미 가입된 이메일입니다.");
         }
-
-        // 비밀번호 해시 후 저장
-        String hashed = passwordEncoder.encode(req.password());
-        User user = new User(req.email(), hashed, Role.READER);
+        // 사용자 생성/저장
+        User user = new User(req.email(), encoder.encode(req.password()), Role.READER);
         userRepo.save(user);
+        /* 기본 레포지토리 보장
+            repositoryEntity 기본 생성자/세터 금지 -> 공개 생성자 사용
+            엔티티에 isDefault 필드가 있고 setDefault가 없으면 생성자에서만 설정
+        */
+        RepositoryEntity repo = repoRepo.findFirstByOwnerIdOrderByIdAsc(user.getId())
+                .orElseGet(() -> repoRepo.save(
+                        new RepositoryEntity(user, "Default Repository", "private")
+                ));
 
-        // 가입 직후 로그인과 동일한 토큰 응답을 원하면, 기존 login 로직 재사용
+        // root folder 보장
+        folderRepository.findByRepositoryAndParentIsNull(repo)
+                .stream()
+                .findFirst()
+                .orElseGet(() -> folderRepository.save(new Folder(repo, null, "root")));
+
         return login(new LoginRequest(req.email(), req.password()));
     }
 }

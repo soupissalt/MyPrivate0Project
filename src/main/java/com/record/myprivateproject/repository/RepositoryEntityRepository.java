@@ -10,4 +10,7 @@ import java.util.Optional;
 public interface RepositoryEntityRepository extends JpaRepository<RepositoryEntity, Long> {
     List<RepositoryEntity> findByOwnerOrderByIdDesc(User owner);
     Optional<RepositoryEntity> findByOwnerIdAndName(Long ownerId, String name);
+    Optional<RepositoryEntity> findByIdAndOwnerId(Long id, Long ownerId);
+    Optional<RepositoryEntity> findFirstByOwnerIdOrderByIdAsc(Long ownerId);
+    List<RepositoryEntity> findByOwnerId(Long userId);
 }
