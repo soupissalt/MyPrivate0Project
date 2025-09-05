@@ -25,7 +25,7 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf.disable());
         http.sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         http.authorizeHttpRequests(
-                auth -> auth.requestMatchers("/api/health", "/api/auth/**").permitAll()
+                auth -> auth.requestMatchers("/api/health", "/api/auth/**", "/api/subject").permitAll()
                         .anyRequest().authenticated()
         );
         http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

@@ -31,4 +31,12 @@ public class FolderController {
                 .toList();
         return ResponseEntity.ok(list);
     }
+
+    @GetMapping("/root")
+    public ResponseEntity<List<FolderResponse>> rootFolder(){
+        var list = folderService.rootFolders().stream()
+                .map(f -> new FolderResponse(f.getId(), f.getName(), null))
+                .toList();
+        return ResponseEntity.ok(list);
+    }
 }

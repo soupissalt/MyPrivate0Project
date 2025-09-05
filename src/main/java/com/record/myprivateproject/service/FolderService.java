@@ -68,4 +68,13 @@ public class FolderService {
         RepositoryEntity repo = new RepositoryEntity(owner, "DefaultRepository", "private");
         return repoRepo.save(repo);
     }
+   @Transactional(readOnly = true)
+   public List<Folder> rootFolders() {
+        Long userId = authContext.currentUserId();
+        Long repoId = repoRepo.findFirstByOwnerIdOrderByIdAsc(userId)
+                .orElseThrow(() -> new IllegalStateException("사용자 저장소가 없습니다."))
+                .getId();
+
+        return folderRepo.findByRepositoryIdAndParentIsNullOrderByIdAsc(repoId);
+   }
 }
