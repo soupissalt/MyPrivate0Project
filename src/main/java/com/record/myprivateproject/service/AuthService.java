@@ -60,29 +60,35 @@ public class AuthService {
         authManager.authenticate(new UsernamePasswordAuthenticationToken(req.email(), req.password()));
         User user = userRepo.findByEmail(req.email()).orElseThrow();
         String access = jwt.createAccessToken(user.getEmail(), Map.of("role", user.getRole().name()));
-        String refresh = UUID.randomUUID().toString();
-        LocalDateTime exp = LocalDateTime.now().plusSeconds(refreshTtlSeconds);
-        rtRepo.save(new RefreshToken(user, refresh, exp));
+        //기존 토큰 전부 삭제 후 새 토큰 1개만 발급
+        String refresh = issueRefreshToken(user);
         return new TokenResponse(access, refresh);
+    }
+
+    @Transactional(readOnly = true)
+    public MeResponse me (String email){
+        User user = userRepo.findByEmail(email).orElseThrow(() ->
+                new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+        return new MeResponse(user.getEmail(), user.getRole().name());
     }
 
     @Transactional
     public TokenResponse refresh(RefreshRequest req){
         RefreshToken refreshToken = rtRepo.findByTokenAndRevokedFalse(req.refreshToken())
                 .orElseThrow(() -> new IllegalArgumentException("잘못된 로그인 접근 방법 입니다!"));
+        //만료 체크
         if (refreshToken.getExpiresAt().isBefore(LocalDateTime.now())) {
-            refreshToken.setRevoked(true);
-            rtRepo.save(refreshToken);
+            //만료된 건 바로 삭제 (누적 방지)
+            rtRepo.deleteByUserId(refreshToken.getUser().getId());
             throw new IllegalArgumentException("토큰이 만료되었습니다! 새로 발급 받으세요!");
         }
 
         User user = refreshToken.getUser();
+        rtRepo.deleteByUserId(user.getId());
+
+        //해당 사용자 토큰 전량 삭제 후 새 토큰 1개만 발급(회전)
+        String newRefresh = issueRefreshToken(user);
         String access = jwt.createAccessToken(user.getEmail(), Map.of("role", user.getRole().name()));
-        refreshToken.setRevoked(true);
-        rtRepo.save(refreshToken);
-        String newRefresh = UUID.randomUUID().toString();
-        LocalDateTime exp = LocalDateTime.now().plusSeconds(refreshTtlSeconds);
-        rtRepo.save(new RefreshToken(user, newRefresh, exp));
         return new TokenResponse(access, newRefresh);
     }
     @Transactional
@@ -118,5 +124,16 @@ public class AuthService {
                 .orElseGet(() -> folderRepository.save(new Folder(repo, null, "root")));
 
         return login(new LoginRequest(req.email(), req.password()));
+    }
+
+    private String issueRefreshToken(User user){
+        // 기존 토큰 모두 삭제 -> 누적 방지
+        rtRepo.deleteByUserId(user.getId());
+
+        String value = UUID.randomUUID().toString();
+        LocalDateTime exp = LocalDateTime.now().plusSeconds(14);
+        RefreshToken refreshToken = new RefreshToken(user, value, exp);
+        rtRepo.save(refreshToken);
+        return value;
     }
 }

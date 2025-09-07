@@ -2,6 +2,7 @@ package com.record.myprivateproject.controller;
 
 import com.record.myprivateproject.domain.Folder;
 import com.record.myprivateproject.dto.FolderDtos.*;
+import com.record.myprivateproject.service.FileService;
 import com.record.myprivateproject.service.FolderService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,18 @@ public class FolderController {
     public FolderController(FolderService folderService) {
         this.folderService = folderService;
     }
+    // 폴더 하나에 대한 하위 폴더 + 파일 묶음
+    @GetMapping("/{folderId}/contents")
+    public ResponseEntity<FolderService.Contents> contents(@PathVariable Long folderId) {
+        return ResponseEntity.ok(folderService.contents(folderId));
+    }
+
+    // 저장소의 루트 폴더 기준 묶음
+    @GetMapping("/repo/{repoId}/contents")
+    public ResponseEntity<FolderService.Contents> rootContents(@PathVariable Long repoId) {
+        return ResponseEntity.ok(folderService.rootContents(repoId));
+    }
+
 
     @PostMapping
     public ResponseEntity<FolderResponse> create(@Valid @RequestBody CreateFolderRequest req){

@@ -22,4 +22,5 @@ public class AuthDtos {
     public record RefreshRequest(
             @NotBlank String refreshToken
     ){}
+    public static record MeResponse(String email, String Role){}
 }

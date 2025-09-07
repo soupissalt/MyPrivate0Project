@@ -4,12 +4,18 @@ import com.record.myprivateproject.domain.FileEntry;
 import com.record.myprivateproject.dto.FileDtos.*;
 import com.record.myprivateproject.security.SecurityUtils;
 import com.record.myprivateproject.service.FileService;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.ResourceRegion;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/api/files")
@@ -31,5 +37,22 @@ public class FileController {
                 latest.getSize(),
                 latest.getSha256()
         ));
+    }
+    @GetMapping("/{fileId}/download")
+    public ResponseEntity<Resource> downloadFile(@PathVariable Long fileId,
+                                                 @RequestParam(required = false) Integer version,
+                                                 @AuthenticationPrincipal UserDetails principal)
+            throws Exception {
+        var d =fileService.prepareDownload(principal.getUsername(), fileId, version);
+
+        ContentDisposition cd = ContentDisposition.attachment()
+                .filename(d.resource().getFilename(), StandardCharsets.UTF_8)
+                .build();
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, cd.toString())
+                .contentType(MediaType.parseMediaType(d.contentType()))
+                .contentLength(d.size())
+                .body(d.resource());
     }
 }
