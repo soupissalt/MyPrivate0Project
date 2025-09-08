@@ -94,6 +94,7 @@ public class AuthService {
     @Transactional
     public void logout(String refreshToken){
         rtRepo.findByTokenAndRevokedFalse(refreshToken).ifPresent(rt -> {
+            rtRepo.deleteByUserId(rt.getUser().getId());
             rt.setRevoked(true);
             rtRepo.save(rt);
         });

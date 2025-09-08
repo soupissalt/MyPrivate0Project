@@ -5,17 +5,20 @@ import com.record.myprivateproject.dto.FileDtos.*;
 import com.record.myprivateproject.security.SecurityUtils;
 import com.record.myprivateproject.service.FileService;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/api/files")
@@ -54,5 +57,45 @@ public class FileController {
                 .contentType(MediaType.parseMediaType(d.contentType()))
                 .contentLength(d.size())
                 .body(d.resource());
+    }
+
+    @GetMapping("/{fileId}/versions")
+    public ResponseEntity<List<Map<String, Object>>> versions(@PathVariable Long fileId){
+        var list = fileService.versions(fileId).stream()
+                .map(v -> Map.<String, Object>of(
+                        "version", v.getVersionNo(),
+                        "size", v.getSize(),
+                        "checksum", v.getSha256(),
+                        "createdAt", v.getCreatedAt(),
+                        "createdBy", v.getCreatedBy() != null ? v.getCreatedBy().getEmail() : null
+                ))
+                .toList();
+        return ResponseEntity.ok(list);
+    }
+
+    public record RenameRequest(String name) {}
+
+    @PatchMapping("/{fileId}/rename")
+    public ResponseEntity<Void> rename(@PathVariable Long fileId,
+                                       @RequestBody RenameRequest req,
+                                       Authentication authentication) {
+        fileService.rename(fileId, req.name, authentication.getName());
+        return ResponseEntity.ok().build();
+    }
+
+    public record MoveRequest(Long toFolderId){}
+    @PatchMapping("/{fileId}/move")
+    public ResponseEntity<Void> move(@PathVariable Long fileId,
+                                     @RequestBody MoveRequest req,
+                                     Authentication authentication) {
+        fileService.move(fileId, req.toFolderId(), authentication.getName());
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{fileId}")
+    public ResponseEntity<Void> delete(@PathVariable Long fileId,
+                                       Authentication authentication) {
+        fileService.deleteFile(fileId, authentication.getName());
+        return ResponseEntity.ok().build();
     }
 }

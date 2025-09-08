@@ -4,6 +4,7 @@ import com.record.myprivateproject.domain.FileEntry;
 import com.record.myprivateproject.domain.Folder;
 import com.record.myprivateproject.domain.RepositoryEntity;
 import com.record.myprivateproject.domain.User;
+import com.record.myprivateproject.dto.TreeDtos;
 import com.record.myprivateproject.repository.FileEntryRepository;
 import com.record.myprivateproject.repository.FolderRepository;
 import com.record.myprivateproject.repository.RepositoryEntityRepository;
@@ -12,7 +13,11 @@ import com.record.myprivateproject.security.AuthContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Transactional
 @Service
@@ -106,5 +111,56 @@ public class FolderService {
                 .getId();
 
         return folderRepo.findByRepositoryIdAndParentIsNullOrderByIdAsc(repoId);
+   }
+
+   @Transactional(readOnly = true)
+    public TreeDtos.FolderNode getTree(Long folderId, int depth) {
+        if (depth<1) depth=1;
+        Folder root = folderRepo.findById(folderId)
+                .orElseThrow(() -> new IllegalArgumentException("폴더를 찾을 수 없습니다."));
+        return buildNode(List.of(root), depth).get(0);
+   }
+
+   private List<TreeDtos.FolderNode> buildNode(List<Folder> roots, int depth) {
+        var filesNow = fileRepo.findByFolderInOrderByIdAsc(roots);
+        Map<Long, List<TreeDtos.FileNode>> filesByFolder = filesNow.stream()
+                .collect(Collectors.groupingBy(f -> f.getFolder().getId(),
+                        Collectors.mapping(f -> new TreeDtos.FileNode(
+                                f.getId(),f.getName(),f.getSize(), f.getContentType(),
+                                f.getLatestVersion() != null ? f.getLatestVersion().getVersionNo():null),
+                                Collectors.toList())));
+        List<TreeDtos.FolderNode> nodes = new ArrayList<>();
+        if (depth == 1){
+            for (Folder folder : roots){
+                nodes.add(new TreeDtos.FolderNode(
+                        folder.getId(),
+                        folder.getName(),
+                        folder.getParent() == null ? null :folder.getParent().getId(),
+                        filesByFolder.getOrDefault(folder.getId(), List.of()),
+                        List.of()
+                ));
+            }
+            return nodes;
+        }
+        var children = folderRepo.findByParentInOrderByIdAsc(roots);
+        Map<Long, List<Folder>> childMap = children.stream()
+                .collect(Collectors.groupingBy(f-> f.getParent().getId()));
+
+        Map<Long, List<TreeDtos.FolderNode>> childNodeMap = new HashMap<>();
+        if (!children.isEmpty()){
+            var childNodes = buildNode(children, depth -1);
+            childNodes.forEach(n ->
+                    childNodeMap.computeIfAbsent(n.parentId(), k -> new ArrayList<>()).add(n));
+        }
+        for (Folder folder : roots){
+            nodes.add(new TreeDtos.FolderNode(
+                    folder.getId(),
+                    folder.getName(),
+                    folder.getParent() == null ? null : folder.getParent().getId(),
+                    filesByFolder.getOrDefault(folder.getId(), List.of()),
+                    childNodeMap.getOrDefault(folder.getId(), List.of())
+            ));
+        }
+        return nodes;
    }
 }

@@ -2,6 +2,7 @@ package com.record.myprivateproject.controller;
 
 import com.record.myprivateproject.domain.Folder;
 import com.record.myprivateproject.dto.FolderDtos.*;
+import com.record.myprivateproject.dto.TreeDtos;
 import com.record.myprivateproject.service.FileService;
 import com.record.myprivateproject.service.FolderService;
 import jakarta.validation.Valid;
@@ -37,6 +38,11 @@ public class FolderController {
         return ResponseEntity.ok(new FolderResponse(folder.getId(), folder.getName(), pid));
     }
 
+    @GetMapping("/{folderId}/tree")
+    public ResponseEntity<TreeDtos.FolderNode> tree(@PathVariable Long folderId,
+                                                    @RequestParam(defaultValue = "2")int depth){
+        return ResponseEntity.ok(folderService.getTree(folderId, depth));
+    }
     @GetMapping("/{folderId}/children")
     public ResponseEntity<List<FolderResponse>> children(@PathVariable Long folderId){
         var list = folderService.children(folderId).stream()

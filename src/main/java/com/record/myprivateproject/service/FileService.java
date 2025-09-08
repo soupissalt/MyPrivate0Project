@@ -31,7 +31,7 @@ public class FileService {
     private final UserRepository userRepo;
     private final StorageService storage;
 
-    public static record Download(Resource resource, String name, String contentType, long size) {}
+    public record Download(Resource resource, String name, String contentType, long size) {}
 
     public FileService(FileEntryRepository fileRepo, FolderRepository folderRepo,
                        FileVersionRepository versionRepo, UserRepository userRepo,
@@ -79,7 +79,7 @@ public class FileService {
         byte[] data = multipart.getBytes();
         String sha256 = sha256Hex(data);
 
-        // ✅ 네 프로젝트의 StorageService API 그대로 사용
+        // 프로젝트의 StorageService API 그대로 사용
         String objectKeyOrPath = storage.store(
                 folder.getRepository().getId(),
                 file.getId(),
@@ -138,7 +138,70 @@ public class FileService {
             }catch (Exception ignore){}
             if (ct == null || ct.isBlank()) ct = "application/octet-stream";}
 
-            return new Download(res, file.getName(), ct, file.getSize());
+        return new Download(res, file.getName(), ct, file.getSize());
+    }
+    @Transactional(readOnly = true)
+    public List<FileVersion> versions(Long fileId) {
+        return versionRepo.findByFileIdOrderByVersionNoDesc(fileId);
+    }
+    @Transactional
+    public void rename(Long fileId, String newName, String userEmail) {
+        if (newName == null || newName.isBlank()) {
+            throw new IllegalArgumentException("이름이 비어있습니다.");
+        }
+        FileEntry file = fileRepo.findById(fileId)
+                .orElseThrow(() -> new IllegalArgumentException("파일을 찾을 수 없습니다."));
+
+        Long ownerId = file.getFolder().getRepository().getOwner().getId();
+        Long actorId = userRepo.findByEmail(userEmail).orElseThrow().getId();
+        if (!ownerId.equals(actorId)) throw new IllegalArgumentException("이 파일을 수정할 권한이 없습니다.");
+
+        if (fileRepo.findByFolderIdAndName(file.getFolder().getId(), newName).isPresent()) {
+            throw new IllegalArgumentException("같은 폴더에 동일한 이름의 파일이 이미 있습니다.");
+        }
+        file.setName(newName);
+        fileRepo.save(file);
+    }
+
+    @Transactional
+    public void move(Long fileId, Long toFolderId, String userEmail) {
+        FileEntry file = fileRepo.findById(fileId)
+                .orElseThrow(()-> new IllegalArgumentException("파일을 찾을 수 없습니다."));
+
+        Folder dest = folderRepo.findById(toFolderId)
+                .orElseThrow(() -> new IllegalArgumentException("대상 폴더를 찾을 수 없습니다."));
+
+        if (!file.getFolder().getRepository().getId().equals(dest.getRepository().getId())) {
+            throw new IllegalArgumentException("다른 저장소로는 이동할 수 없습니다.");
         }
 
+        Long ownerId = file.getFolder().getRepository().getOwner().getId();
+        Long actorId = userRepo.findByEmail(userEmail).orElseThrow().getId();
+
+        if (!ownerId.equals(actorId)) {
+            throw new IllegalArgumentException("이 파일을 이동할 권한이 없습니다.");
+        }
+
+        if (fileRepo.findByFolderIdAndName(dest.getId(),file.getName()).isPresent()){
+            throw new IllegalArgumentException("대상 폴더에 동일한 이름의 파일이 이미 존재합니다.");
+        }
+        file.setFolder(dest);
+        fileRepo.save(file);
+    }
+
+    @Transactional
+    public void deleteFile(Long fileId, String userEmail) {
+        FileEntry file =fileRepo.findById(fileId)
+                .orElseThrow(()-> new IllegalArgumentException("파일을 찾을 수 없습니다."));
+
+        Long ownerId = file.getFolder().getRepository().getOwner().getId();
+        Long actorId = userRepo.findByEmail(userEmail).orElseThrow().getId();
+        if (!ownerId.equals(actorId)) {
+            throw new IllegalArgumentException("이 파일을 삭제할 권한이 없습니다.");
+        }
+
+        List<FileVersion> versions = versionRepo.findByFileOrderByVersionNoDesc(file);
+        versionRepo.deleteAll(versions);
+        fileRepo.delete(file);
+    }
 }
