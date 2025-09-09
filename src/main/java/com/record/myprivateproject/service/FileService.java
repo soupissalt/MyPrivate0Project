@@ -4,16 +4,22 @@ import com.record.myprivateproject.domain.FileEntry;
 import com.record.myprivateproject.domain.FileVersion;
 import com.record.myprivateproject.domain.Folder;
 import com.record.myprivateproject.domain.User;
+import com.record.myprivateproject.dto.AuditAction;
 import com.record.myprivateproject.repository.FileEntryRepository;
 import com.record.myprivateproject.repository.FileVersionRepository;
 import com.record.myprivateproject.repository.FolderRepository;
 import com.record.myprivateproject.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.ResourceRegion;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,6 +28,7 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class FileService {
@@ -30,17 +37,30 @@ public class FileService {
     private final FileVersionRepository versionRepo;
     private final UserRepository userRepo;
     private final StorageService storage;
+    private final AuditService auditService;
 
     public record Download(Resource resource, String name, String contentType, long size) {}
 
     public FileService(FileEntryRepository fileRepo, FolderRepository folderRepo,
                        FileVersionRepository versionRepo, UserRepository userRepo,
-                       StorageService storage){
+                       StorageService storage, AuditService auditService){
         this.fileRepo = fileRepo;
         this.folderRepo = folderRepo;
         this.versionRepo = versionRepo;
         this.userRepo = userRepo;
         this.storage = storage;
+        this.auditService = auditService;
+    }
+
+    @Value("${storage.base-dir}")
+    private String storageBaseDir;
+
+    public String resolvePhysicalPathByFileId(Long fileId) {
+        var latest = versionRepo.findByFileIdOrderByVersionNoDesc(fileId)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("파일 버전을 찾을 수 없습니다."));
+        return Paths.get(storageBaseDir, latest.getSha256()).toString();
     }
 
     @Transactional
@@ -97,6 +117,12 @@ public class FileService {
         file.setLatestVersion(ver);
         file.setSize((long) data.length);
         file.setContentType(finalContentType);
+        auditService.record(
+                AuditAction.FILE_UPLOAD.name(),
+                "FILE",
+                file.getId(),
+                "name" + file.getName() + ", ver = "+ ver.getVersionNo()
+        );
         return fileRepo.save(file);
     }
     @Transactional(readOnly = true)
@@ -137,7 +163,12 @@ public class FileService {
                 if (probed != null) ct =probed;
             }catch (Exception ignore){}
             if (ct == null || ct.isBlank()) ct = "application/octet-stream";}
-
+        auditService.record(
+                AuditAction.FILE_DOWNLOAD.name(),
+                "FILE",
+                file.getId(),
+                "ver = "+ fv.getVersionNo()
+        );
         return new Download(res, file.getName(), ct, file.getSize());
     }
     @Transactional(readOnly = true)
@@ -161,6 +192,12 @@ public class FileService {
         }
         file.setName(newName);
         fileRepo.save(file);
+        auditService.record(
+          AuditAction.FILE_RENAME.name(),
+          "FILE",
+                file.getId(),
+                "rename to = " + newName
+        );
     }
 
     @Transactional
@@ -187,6 +224,12 @@ public class FileService {
         }
         file.setFolder(dest);
         fileRepo.save(file);
+        auditService.record(
+                AuditAction.FILE_MOVE.name(),
+                "FILE",
+                file.getId(),
+                "toFolderId = " + toFolderId
+        );
     }
 
     @Transactional
@@ -203,5 +246,63 @@ public class FileService {
         List<FileVersion> versions = versionRepo.findByFileOrderByVersionNoDesc(file);
         versionRepo.deleteAll(versions);
         fileRepo.delete(file);
+        auditService.record(
+                AuditAction.FILE_DELETE.name(),
+                "FILE",
+                file.getId(),
+                "deleted"
+        );
+    }
+
+    public ResponseEntity<ResourceRegion> streamingPublicVideo(HttpHeaders headers, String pathStr) {
+        Path path = Paths.get(pathStr);
+        Resource resource = new FileSystemResource(path);
+
+        if (!resource.exists() || !resource.isReadable()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        final long CHUNK_SIZE = 1024L * 1024L; // 1MB
+        try {
+            long contentLength = resource.contentLength();
+
+            List<HttpRange> ranges = headers.getRange();
+            ResourceRegion region;
+
+            if (ranges == null || ranges.isEmpty()) {
+                // Range 없이 들어온 경우: 첫 청크만 보냄(206)
+                long rangeLen = Math.min(CHUNK_SIZE, contentLength);
+                region = new ResourceRegion(resource, 0, rangeLen);
+                return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                        .cacheControl(CacheControl.maxAge(10, TimeUnit.MINUTES))
+                        .contentType(MediaTypeFactory.getMediaType(resource).orElse(MediaType.APPLICATION_OCTET_STREAM))
+                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                        .body(region);
+            } else {
+                // 첫 번째 Range만 처리(대부분 1개)
+                HttpRange range = ranges.get(0);
+                long start = range.getRangeStart(contentLength);
+                long end   = range.getRangeEnd(contentLength);
+
+                // 잘못된 범위(파일 길이 벗어남)
+                if (start >= contentLength) {
+                    return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                            .header(HttpHeaders.CONTENT_RANGE, "bytes */" + contentLength)
+                            .build();
+                }
+
+                long rangeLen = Math.min(CHUNK_SIZE, end - start + 1);
+                region = new ResourceRegion(resource, start, rangeLen);
+
+                return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                        .cacheControl(CacheControl.maxAge(10, TimeUnit.MINUTES))
+                        .contentType(MediaTypeFactory.getMediaType(resource).orElse(MediaType.APPLICATION_OCTET_STREAM))
+                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                        .body(region);
+            }
+        } catch (IOException e) {
+            // 파일 길이 조회 실패 등
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 }

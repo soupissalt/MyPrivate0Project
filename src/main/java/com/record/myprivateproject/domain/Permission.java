@@ -19,8 +19,7 @@ public class Permission {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
-    private PermissionType permission; //READ, WRITE
-
+    private PermissionType permission; //READ, WRITE, OWNER`
     protected Permission() {}
 
     public Permission(RepositoryEntity repository, User grantee, PermissionType permission){

@@ -1,6 +1,7 @@
 package com.record.myprivateproject.service;
 
 import com.record.myprivateproject.domain.*;
+import com.record.myprivateproject.dto.AuditAction;
 import com.record.myprivateproject.dto.AuthDtos.*;
 import com.record.myprivateproject.dto.RegisterRequest;
 import com.record.myprivateproject.repository.FolderRepository;
@@ -29,6 +30,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final RepositoryEntityRepository repoRepo;
     private final FolderRepository folderRepository;
+    private final AuditService auditService;
 
     public AuthService(
             UserRepository userRepo,
@@ -36,7 +38,7 @@ public class AuthService {
             PasswordEncoder encoder,
             AuthenticationManager authManager,
             JwtTokenProvider jwt,
-            @Value("${app.jwt.refresh-ttl-seconds}")long refreshTtlSeconds, UserRepository userRepository, PasswordEncoder passwordEncoder, RepositoryEntityRepository repoRepo, FolderRepository folderRepository){
+            @Value("${app.jwt.refresh-ttl-seconds}")long refreshTtlSeconds, UserRepository userRepository, PasswordEncoder passwordEncoder, RepositoryEntityRepository repoRepo, FolderRepository folderRepository, AuditService auditService){
                 this.userRepo = userRepo;
                 this.encoder = encoder;
                 this.rtRepo = rtRepo;
@@ -46,6 +48,7 @@ public class AuthService {
                 this.passwordEncoder = passwordEncoder;
                 this.repoRepo = repoRepo;
         this.folderRepository = folderRepository;
+        this.auditService = auditService;
     }
 
     @Transactional
@@ -62,6 +65,13 @@ public class AuthService {
         String access = jwt.createAccessToken(user.getEmail(), Map.of("role", user.getRole().name()));
         //기존 토큰 전부 삭제 후 새 토큰 1개만 발급
         String refresh = issueRefreshToken(user);
+        auditService.recordAs(
+                user.getId(),
+                AuditAction.LOGIN.name(),
+                "AUTH",
+                user.getId(),
+                "email =" + user.getEmail()
+        );
         return new TokenResponse(access, refresh);
     }
 
@@ -89,15 +99,28 @@ public class AuthService {
         //해당 사용자 토큰 전량 삭제 후 새 토큰 1개만 발급(회전)
         String newRefresh = issueRefreshToken(user);
         String access = jwt.createAccessToken(user.getEmail(), Map.of("role", user.getRole().name()));
+        auditService.recordAs(
+                user.getId(),
+                AuditAction.AUTH_REFRESH.name(),
+                "AUTH",
+                user.getId(),
+                "refresh"
+        );
         return new TokenResponse(access, newRefresh);
     }
     @Transactional
     public void logout(String refreshToken){
+        User user = userRepo.findByEmail(refreshToken).orElseThrow( );
         rtRepo.findByTokenAndRevokedFalse(refreshToken).ifPresent(rt -> {
             rtRepo.deleteByUserId(rt.getUser().getId());
             rt.setRevoked(true);
             rtRepo.save(rt);
         });
+        auditService.recordAs(user.getId(),
+                AuditAction.LOGOUT.name(),
+                "AUTH", user.getId(),
+                "logout"
+        );
     }
     // import들: UserRepository, PasswordEncoder, User, RegisterRequest, LoginRequest, TokenResponse 등 프로젝트에 맞게
     @Transactional

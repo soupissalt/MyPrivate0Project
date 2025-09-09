@@ -24,10 +24,15 @@ public class AuditService {
         this.userRepo = userRepo;
     }
     public void record(String action, String targetType, Long targetId, String detail){
-        User actor = userRepo.getReferenceById(auth.currentUserId());
+        Long userId = auth.currentUserId();
+        User actor = userRepo.getReferenceById(userId);
         aurepo.save(new AuditLog(actor, action, targetType, targetId, detail));
     }
 
+    public void recordAs(Long actorUserId, String action, String targetType, Long targetId, String detail){
+        User actor = (actorUserId != null) ? userRepo.getReferenceById(actorUserId) : null;
+        aurepo.save(new AuditLog(actor, action, targetType, targetId, detail));
+    }
     @Transactional(readOnly = true)
     public List<AuditLog> list(String targetType, Long targetId){
         return  aurepo.findByTargetTypeAndTargetIdOrderByIdDesc(targetType, targetId);

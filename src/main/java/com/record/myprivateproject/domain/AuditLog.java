@@ -2,6 +2,7 @@ package com.record.myprivateproject.domain;
 
 import jakarta.persistence.*;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 @Entity
@@ -27,6 +28,12 @@ public class AuditLog {
     @Column(length = 1000)
     private String detail; //json, text
 
+    @Column(name = "ip", length = 64)
+    private String ip;
+
+    @Column(name = "occurred_at", nullable = false)
+    private LocalDateTime occurredAt;
+
     @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -37,6 +44,7 @@ public class AuditLog {
         this.targetType = targetType;
         this.targetId = targetId;
         this.detail = detail;
+        this.occurredAt = LocalDateTime.now();
     }
 
     public Long getId() {
@@ -65,5 +73,10 @@ public class AuditLog {
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+    @PrePersist
+    public void prePersist() {
+        if (occurredAt == null)
+            occurredAt = LocalDateTime.now(Clock.systemUTC());
     }
 }

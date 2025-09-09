@@ -5,6 +5,7 @@ import com.record.myprivateproject.dto.FileDtos.*;
 import com.record.myprivateproject.security.SecurityUtils;
 import com.record.myprivateproject.service.FileService;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -98,4 +99,14 @@ public class FileController {
         fileService.deleteFile(fileId, authentication.getName());
         return ResponseEntity.ok().build();
     }
+
+    @GetMapping("/streamingVideo/{fileId}")
+    public ResponseEntity<ResourceRegion> streamVideo(
+            @RequestHeader HttpHeaders headers,
+            @PathVariable Long fileId
+    ) {
+        String pathStr = fileService.resolvePhysicalPathByFileId(fileId);
+        return fileService.streamingPublicVideo(headers, pathStr);
+    }
+
 }

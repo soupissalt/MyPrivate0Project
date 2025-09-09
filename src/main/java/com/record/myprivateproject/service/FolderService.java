@@ -4,6 +4,7 @@ import com.record.myprivateproject.domain.FileEntry;
 import com.record.myprivateproject.domain.Folder;
 import com.record.myprivateproject.domain.RepositoryEntity;
 import com.record.myprivateproject.domain.User;
+import com.record.myprivateproject.dto.AuditAction;
 import com.record.myprivateproject.dto.TreeDtos;
 import com.record.myprivateproject.repository.FileEntryRepository;
 import com.record.myprivateproject.repository.FolderRepository;
@@ -28,14 +29,16 @@ public class FolderService {
     private final UserRepository userRepo;
     private final AuthContext authContext;
     private final RepositoryEntityRepository repositoryEntityRepository;
+    private final AuditService auditService;
 
-    public FolderService(FolderRepository folderRepo, RepositoryEntityRepository repoRepo, UserRepository userRepo, AuthContext authContext, RepositoryEntityRepository repositoryEntityRepository, FileEntryRepository fileRepo) {
+    public FolderService(FolderRepository folderRepo, RepositoryEntityRepository repoRepo, UserRepository userRepo, AuthContext authContext, RepositoryEntityRepository repositoryEntityRepository, FileEntryRepository fileRepo, AuditService auditService) {
         this.folderRepo = folderRepo;
         this.fileRepo = fileRepo;
         this.repoRepo = repoRepo;
         this.userRepo = userRepo;
         this.authContext = authContext;
         this.repositoryEntityRepository = repositoryEntityRepository;
+        this.auditService = auditService;
     }
     public record Item(Long id, String name){}
     public record FileItem(Long id, String name, Long size, String contentType, Integer version){}
@@ -84,6 +87,12 @@ public class FolderService {
         Folder folder = new Folder(repo, parent, name);
         folderRepo.save(folder);
 
+        auditService.record(
+                AuditAction.FOLDER_CREATE.name(),
+                "FOLDER",
+                folder.getId(),
+                "name = " + folder.getName()
+        );
         return folder;
     }
 
