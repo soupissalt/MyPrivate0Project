@@ -5,6 +5,7 @@ import com.record.myprivateproject.dto.FolderDtos.*;
 import com.record.myprivateproject.dto.TreeDtos;
 import com.record.myprivateproject.service.FileService;
 import com.record.myprivateproject.service.FolderService;
+import com.record.myprivateproject.service.FolderTreeService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,8 +16,11 @@ import java.util.List;
 @RequestMapping("/api/folders")
 public class FolderController {
     private final FolderService folderService;
-    public FolderController(FolderService folderService) {
+    private final FolderTreeService folderTreeService;
+
+    public FolderController(FolderService folderService, FolderTreeService folderTreeService) {
         this.folderService = folderService;
+        this.folderTreeService = folderTreeService;
     }
     // 폴더 하나에 대한 하위 폴더 + 파일 묶음
     @GetMapping("/{folderId}/contents")
@@ -58,4 +62,10 @@ public class FolderController {
                 .toList();
         return ResponseEntity.ok(list);
     }
+
+    @GetMapping("/{folderId}/trees")
+    public ResponseEntity<TreeDtos> getTrees(@PathVariable Long folderId){
+        return ResponseEntity.ok(folderTreeService.getFolderTree(folderId));
+    }
+
 }

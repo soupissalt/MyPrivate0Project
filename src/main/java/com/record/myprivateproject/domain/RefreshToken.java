@@ -2,11 +2,62 @@ package com.record.myprivateproject.domain;
 
 import jakarta.persistence.*;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+
+import static org.apache.commons.codec.digest.DigestUtils.sha256;
 
 @Entity
 @Table(name = "refresh_tokens")
 public class RefreshToken {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @Column(name="token_hash", nullable = false, unique = true, columnDefinition = "VARBINARY(32)")
+    private byte[] tokenHash;
+
+    @Column(name = "expires_at", nullable = false)
+    private LocalDateTime expiresAt;
+
+    @Column(name = "revoked", columnDefinition = "TINYINT(1)", nullable = false)
+    private boolean revoked =false;
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "used_at")
+    private LocalDateTime usedAt;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "replaced_by")
+    private RefreshToken replacedBy;
+
+    protected RefreshToken() {}
+
+    public RefreshToken(User user, String rawToken, LocalDateTime expiresAt) {
+        this.user = user;
+        this.tokenHash = sha256(rawToken);
+        this.expiresAt = expiresAt;
+        this.revoked = false;
+    }
+    private static byte[] sha256(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return md.digest(input.getBytes(StandardCharsets.UTF_8));
+        }catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+    @PrePersist
+    void onCreate(){
+        this.createdAt = LocalDateTime.now();
+    }
+
     public Long getId() {
         return id;
     }
@@ -23,12 +74,12 @@ public class RefreshToken {
         this.user = user;
     }
 
-    public String getToken() {
-        return token;
+    public byte[] getTokenHash() {
+        return tokenHash;
     }
 
-    public void setToken(String token) {
-        this.token = token;
+    public void setTokenHash(byte[] tokenHash) {
+        this.tokenHash = tokenHash;
     }
 
     public LocalDateTime getExpiresAt() {
@@ -47,27 +98,27 @@ public class RefreshToken {
         this.revoked = revoked;
     }
 
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
 
-    @ManyToOne(optional = false, fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
 
-    @Column(nullable = false, unique = true, length = 512)
-    private String token;
+    public LocalDateTime getUsedAt() {
+        return usedAt;
+    }
 
-    @Column(name = "expires_at", nullable = false)
-    private LocalDateTime expiresAt;
+    public void setUsedAt(LocalDateTime usedAt) {
+        this.usedAt = usedAt;
+    }
 
-    @Column(name = "revoked", columnDefinition = "TINYINT(1)", nullable = false)
-    private boolean revoked;
+    public RefreshToken getReplacedBy() {
+        return replacedBy;
+    }
 
-    protected RefreshToken() {}
-
-    public RefreshToken(User user, String token, LocalDateTime expiresAt) {
-        this.user = user;
-        this.token = token;
-        this.expiresAt = expiresAt;
+    public void setReplacedBy(RefreshToken replacedBy) {
+        this.replacedBy = replacedBy;
     }
 }

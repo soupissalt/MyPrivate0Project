@@ -9,15 +9,21 @@ import com.record.myprivateproject.repository.RefreshTokenRepository;
 import com.record.myprivateproject.repository.RepositoryEntityRepository;
 import com.record.myprivateproject.repository.UserRepository;
 import com.record.myprivateproject.security.JwtTokenProvider;
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
+
 
 @Service
 public class AuthService {
@@ -83,8 +89,8 @@ public class AuthService {
     }
 
     @Transactional
-    public TokenResponse refresh(RefreshRequest req){
-        RefreshToken refreshToken = rtRepo.findByTokenAndRevokedFalse(req.refreshToken())
+    public TokenResponse refresh(@NotBlank String rawRefreshToken){
+        RefreshToken refreshToken = rtRepo.findByTokenHashAndRevokedFalse(rawRefreshToken)
                 .orElseThrow(() -> new IllegalArgumentException("잘못된 로그인 접근 방법 입니다!"));
         //만료 체크
         if (refreshToken.getExpiresAt().isBefore(LocalDateTime.now())) {
@@ -109,16 +115,17 @@ public class AuthService {
         return new TokenResponse(access, newRefresh);
     }
     @Transactional
-    public void logout(String refreshToken){
-        User user = userRepo.findByEmail(refreshToken).orElseThrow( );
-        rtRepo.findByTokenAndRevokedFalse(refreshToken).ifPresent(rt -> {
-            rtRepo.deleteByUserId(rt.getUser().getId());
-            rt.setRevoked(true);
-            rtRepo.save(rt);
-        });
-        auditService.recordAs(user.getId(),
+    public void logout(@NotBlank String refreshToken){
+        RefreshToken rt = rtRepo.findByTokenHashAndRevokedFalse(refreshToken)
+                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 토큰입니다."));
+
+        Long userId = rt.getUser().getId();
+
+        // 해당 사용자 토큰 전부 삭제(혹은 필요시 해당 토큰만 삭제로 바꿔도 됨)
+        rtRepo.deleteByUserId(userId);
+        auditService.recordAs(userId,
                 AuditAction.LOGOUT.name(),
-                "AUTH", user.getId(),
+                "AUTH", userId,
                 "logout"
         );
     }
@@ -150,14 +157,30 @@ public class AuthService {
         return login(new LoginRequest(req.email(), req.password()));
     }
 
-    private String issueRefreshToken(User user){
-        // 기존 토큰 모두 삭제 -> 누적 방지
+    private String issueRefreshToken(User user) {
         rtRepo.deleteByUserId(user.getId());
 
-        String value = UUID.randomUUID().toString();
-        LocalDateTime exp = LocalDateTime.now().plusSeconds(14);
-        RefreshToken refreshToken = new RefreshToken(user, value, exp);
-        rtRepo.save(refreshToken);
-        return value;
+        String raw = UUID.randomUUID().toString().replace("-", "");
+        LocalDateTime exp = LocalDateTime.now().plusDays(14);
+
+        RefreshToken rt = new RefreshToken(user, raw, exp);
+        rtRepo.save(rt);
+        return raw; // 클라이언트에는 원본
+    }
+
+    private static String generateRefreshToken() {
+        // UUID도 가능하지만 보안을 위해 32바이트 랜덤 권장
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private static byte[] sha256(String s) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return md.digest(s.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 }

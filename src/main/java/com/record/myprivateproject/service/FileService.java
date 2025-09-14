@@ -27,6 +27,7 @@ import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
@@ -52,7 +53,7 @@ public class FileService {
         this.auditService = auditService;
     }
 
-    @Value("${storage.base-dir}")
+    @Value("${app.storage.root}")
     private String storageBaseDir;
 
     public String resolvePhysicalPathByFileId(Long fileId) {
@@ -304,5 +305,20 @@ public class FileService {
             // 파일 길이 조회 실패 등
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+    @Transactional
+    public List<Map<String,Object>> versionSp(Long fileId){
+        fileRepo.findById(fileId)
+                .orElseThrow(() -> new IllegalArgumentException("파일을 찾을 수 없습니다."));
+
+        return versionRepo.callGetFileVersions(fileId).stream()
+                .map(r -> Map.<String, Object> of(
+                        "version", r.getVersionNo(),
+                        "size", r.getSize(),
+                        "checksum", r.getChecksum(),
+                        "createdAt", r.getCreatedAt().toInstant(),
+                        "createdBy", r.getCreatedBy()
+                ))
+                .toList();
     }
 }

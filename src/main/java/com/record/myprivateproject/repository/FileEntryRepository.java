@@ -11,4 +11,5 @@ public interface FileEntryRepository extends JpaRepository<FileEntry, Long> {
     List<FileEntry> findByFolderOrderByIdAsc(Folder folder);
     Optional<FileEntry> findByFolderIdAndName(Long folderId, String name);
     List<FileEntry> findByFolderInOrderByIdAsc(List<Folder> folders);
+    List<FileEntry> findByFolderIdOrderByNameAsc(Long folderId);
 }
