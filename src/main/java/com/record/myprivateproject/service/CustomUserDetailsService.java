@@ -2,6 +2,8 @@ package com.record.myprivateproject.service;
 
 import com.record.myprivateproject.domain.Role;
 import com.record.myprivateproject.domain.User;
+import com.record.myprivateproject.exception.BusinessException;
+import com.record.myprivateproject.exception.ErrorCode;
 import com.record.myprivateproject.repository.UserRepository;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -23,7 +25,8 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("존재하지 않는 사용자 입니다!: "+email));
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INPUT_VALUE,"존재하지 않는 사용자 입니다!: " + email) {
+                });
         String role ="ROLE_"+(user.getRole() == null ? Role.READER : user.getRole().name());
         return org.springframework.security.core.userdetails.User
                 .withUsername(user.getEmail())

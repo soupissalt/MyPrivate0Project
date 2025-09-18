@@ -4,6 +4,8 @@ import com.record.myprivateproject.domain.*;
 import com.record.myprivateproject.dto.AuditAction;
 import com.record.myprivateproject.dto.AuthDtos.*;
 import com.record.myprivateproject.dto.RegisterRequest;
+import com.record.myprivateproject.exception.BusinessException;
+import com.record.myprivateproject.exception.ErrorCode;
 import com.record.myprivateproject.repository.FolderRepository;
 import com.record.myprivateproject.repository.RefreshTokenRepository;
 import com.record.myprivateproject.repository.RepositoryEntityRepository;
@@ -84,19 +86,22 @@ public class AuthService {
     @Transactional(readOnly = true)
     public MeResponse me (String email){
         User user = userRepo.findByEmail(email).orElseThrow(() ->
-                new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+                new BusinessException(ErrorCode.TOKEN_EXPIRED, "토큰 만료되었습니다!" ) {
+                });
         return new MeResponse(user.getEmail(), user.getRole().name());
     }
 
     @Transactional
     public TokenResponse refresh(@NotBlank String rawRefreshToken){
         RefreshToken refreshToken = rtRepo.findByTokenHashAndRevokedFalse(rawRefreshToken)
-                .orElseThrow(() -> new IllegalArgumentException("잘못된 로그인 접근 방법 입니다!"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.TOKEN_INVALID,"잘못된 로그인 접근 방법 입니다!") {
+                });
         //만료 체크
         if (refreshToken.getExpiresAt().isBefore(LocalDateTime.now())) {
             //만료된 건 바로 삭제 (누적 방지)
             rtRepo.deleteByUserId(refreshToken.getUser().getId());
-            throw new IllegalArgumentException("토큰이 만료되었습니다! 새로 발급 받으세요!");
+            throw  new BusinessException(ErrorCode.TOKEN_EXPIRED, "토큰 만료되었습니다!") {
+            };
         }
 
         User user = refreshToken.getUser();
@@ -117,7 +122,8 @@ public class AuthService {
     @Transactional
     public void logout(@NotBlank String refreshToken){
         RefreshToken rt = rtRepo.findByTokenHashAndRevokedFalse(refreshToken)
-                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 토큰입니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.TOKEN_EXPIRED, "토큰 만료되었습니다!") {
+                });
 
         Long userId = rt.getUser().getId();
 
@@ -134,7 +140,8 @@ public class AuthService {
     public TokenResponse register(RegisterRequest req) {
         // 중복 이메일 사전 체크
         if (userRepo.existsByEmail(req.email())) {
-            throw new IllegalArgumentException("이미 가입된 이메일입니다.");
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE,"이미 가입된 이메일입니다.") {
+            };
         }
         // 사용자 생성/저장
         User user = new User(req.email(), encoder.encode(req.password()), Role.READER);
