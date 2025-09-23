@@ -5,6 +5,8 @@ import com.record.myprivateproject.domain.FileVersion;
 import com.record.myprivateproject.domain.Folder;
 import com.record.myprivateproject.domain.User;
 import com.record.myprivateproject.dto.AuditAction;
+import com.record.myprivateproject.dto.FileSummaryDto;
+import com.record.myprivateproject.dto.PageResponse;
 import com.record.myprivateproject.exception.BusinessException;
 import com.record.myprivateproject.exception.ErrorCode;
 import com.record.myprivateproject.repository.FileEntryRepository;
@@ -15,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.ResourceRegion;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -345,5 +348,12 @@ public class FileService {
                         "createdBy", r.getCreatedBy()
                 ))
                 .toList();
+    }
+
+    public PageResponse<FileSummaryDto> list(Long folderId, String q, Pageable pageable) {
+        var keyword = (q == null || q.isBlank()) ? "" : q.trim();
+        var page = fileRepo.findByFolderIdAndNameContainingIgnoreCase(folderId, keyword,pageable);
+        var items = page.getContent().stream().map(FileSummaryDto::from).toList();
+        return PageResponse.of(items,page);
     }
 }

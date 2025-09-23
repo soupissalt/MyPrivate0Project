@@ -20,7 +20,8 @@ public class WebMvcConfig {
         bean.setOrder(1);
         return bean;
     }
-    public OpenAPI projectOpenAPI(){
+    @Bean
+    public OpenAPI base(){
         return new OpenAPI()
                 .info(new Info()
                         .title("My Project API")

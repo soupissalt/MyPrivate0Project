@@ -2,6 +2,8 @@ package com.record.myprivateproject.domain;
 
 import jakarta.persistence.*;
 
+import java.time.LocalDate;
+
 @Entity
 @Table(name = "files")
 public class FileEntry {
@@ -26,6 +28,9 @@ public class FileEntry {
 
     @Column(columnDefinition = "bigint default 0")
     private Long size = 0L;
+
+    @Column(name = "created_at")
+    private LocalDate createdAt = LocalDate.now();
 
     protected FileEntry() {}
     public FileEntry(Folder folder, String name, String contentType) {
@@ -74,6 +79,9 @@ public class FileEntry {
         return size;
     }
 
+    public LocalDate getCreatedAt() {
+        return createdAt;
+    }
     public void setSize(Long size) {
         this.size = size;
     }
